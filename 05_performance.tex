@@ -1,0 +1,91 @@
+\section{Cost}\label{sec:performance}
+
+%\dnote{this should be part of a longer and more comprehensive performance evaluation section 4}
+%Each party takes around 3MB of memory space during the protocol execution and take around 1 hour for certificate signing using the double-and-add procedure for elliptic curve point multiplication. 
+
+The goal of the cost evaluation is to understand the actual cost of deploying a decentralized CA in different scenarios.  Since latency of key generation does not matter much, and it is easy to parallelize MPC executions to reduce latency~\cite{husted2013gpu,buescher2015faster}, we focus our analysis on the financial cost of operating a decentralized CA.  Except in cases where inter-host bandwidth is free, this cost is dominated by bandwidth.
+We report results for signing only, since the key generation task is less expensive than signing, and is only done once for each key pair, where we expect many signings to be done.
+
+\begin{table*}
+\begin{center}
+\begin{threeparttable}
+
+\begin{tabular}{ |c|S[table-format=3.3]|S[table-format=3.3]|S[table-format=3.3]|S[table-format=3.3]|S[table-format=3.3]|S[table-format=3.3]| } 
+ \hline
+ & \multicolumn{2}{c|}{Local} & \multicolumn{2}{c|}{Same Region} & \multicolumn{2}{c|}{Long Distance}
+ \\
+
+\hline
+& \text{Yao} & \text{DualEx} & \text{Yao} & \text{DualEx} & \text{Yao} & \text{DualEx} \\
+\hhline{|=|=|=|=|=|=|=|}
+Optimal \# simultaneous & 24 & 16 & 32 & 24 & 72 & 40 \\
+Compute Time (hrs) & 17.0 & 25.5 & 13.1 & 19.6 & 31.3 & 34.3 \\
+Duration (/signing) & 0.708  & 1.59 & 0.409 &  0.817 & 0.435 & 0.858 \\ 
+Compute Cost (\$/signing)& 0.282 & 0.633 & 0.326 & 0.65 & 0.346 & 0.684 \\
+\hline
+Data Transfer (GiB/signing) & 409.72 & 819.44 & 409.72 & 819.44  & 409.72 & 819.44 \\ 
+Data Transfer Cost (\$/GiB)& 0 & 0 & 0 & 0 & 0.02 & 0.02 \\ 
+Total Data Transfer Cost (\$/signing) & 0 & 0 & 0 & 0 & 8.19 & 16.39 \\ 
+\hline
+Total Cost (\$/signing) & 0.282 & 0.633 & 0.326 & 0.65 & 8.54 & 17.07 \\ 
+\hline
+\end{tabular}
+\end{threeparttable}
+
+\caption{Cost results. {\rm The results shown are for generating a signature with the ECDSA on the curve secp192k1 using Yao's semi-honest garbled circuits protocol and Dual Execution.  For the Local execution, there is a single host executing both sides of the protocol. Same Region uses two host in in the same EC2 region (US East); Long Distance uses one host in US East and the other in US West. Costs are rough estimates computed based on current AWS pricing, \$0.398 per hour for an c4.2xlarge Amazon EC2 node. %\dnote{where did this come from? is this on-demand or other? I see \$0.199 as on-demand price in US East now}. 
+Bandwidth charges can vary by region, but are approximately \$0.02/GiB at bulk transfer rates across regions within AWS. %\dnote{please check this is correct} \bnote{across AWS regions it is 2 cents, but for internet charge, i.e. between AWS and Azure, it is 9 cents}
+%\dnote{are these results for one execution, or average/median over several?} \bnote{These results are for one execution}
+}} 
+\label{fig:performance_table1}
+\end{center}
+\end{table*}
+%\dnote{align the table columns around decimal point - search for latex how to do this, \url{https://tex.stackexchange.com/questions/255158/tabular-alignment-and-centering-around-decimal-point}}
+
+\shortsection{Setup} Our experiments were performed on Amazon Elastic Compute Cloud (EC2) using c4.2xlarge nodes with 15 GiB of memory and 4 physical cores capable of running 8 simultaneous threads.  We selected c4.2xlarge nodes as they are the latest compute-optimized nodes of AWS and have a dedicated EBS bandwidth of 1000 Mbps. %\dnote{did we see this in measurements?} \bnote{Yes, we measured the bandwidth and it came to be around 2.57 Gbps}
+For the operating system, we used Amazon's distribution of Ubuntu 14.04 (64 bit).  %\dnote{did we have results with Azure also?}  \dnote{code availability} \bnote{we will make the code available post acceptance}
+%\dnote{where do you explain the configurations?} \dnote{80-bit security level, and justification}
+ 
+We implement the NIST elliptic curve secp192k1~\cite{elliptic_curve_domain_parameters}, which has 192-bit parameters. All the private and random keys shares are 192-bit numbers generated using C's GNU MP Bignum Library~\cite{libgmp} (GMPLib). We use Obliv-C~\cite{cryptoeprint:2015:1153} for secure MPC and our garbled circuit implementation uses 80-bit long cryptographic random wire labels. Secure computation over the 192-bit parameters is done using Absentminded Crypto Kit~\cite{absentminded_crypto_kit}. The hashing algorithm used for our input to the signing algorithm is SHA256, and our TBSCertificate is generated using OpenSSL~\cite{openssl} using a sample certificate data that Symantec could have used to sign Google's certificate. Regardless of the data contained in the TBSCertificate, the SHA256 hashed TBSCertificate results in a 32-byte string that is later submitted to the signing function. The TBSCertificate appears in the final certificate and is used by browsers to verify the signature. All of the data are fed into the MPC as 8-bit integer arrays.
+
+We evaluated the signing costs with three different scenarios of servers/nodes based on the distance between them: \emph{Local}, where both the parties run MPC on same machine; \emph{Same Region}, where each party runs on separate machines in the same region (we used US East -- Northern Virginia) and \emph{Long Distance}, where each party runs on separate machines in different data centers; we used one host in US East -- Northern Virginia and the other in US West -- Northern California. This experimental setup helps us know to what extent the decentralized certificate authority is practical when the participating CAs are geographically separated.
+
+\shortsection{Results}
+Table~\ref{fig:performance_table1} summarizes the runtime measurements and cost estimates for signings completed using both the semi-honest and dual execution protocols for the three scenarios.
+
+To simulate running a real server, the nodes were loaded with increasing number of simultaneous signings until the lowest compute time per signing was discovered. The compute time per signing is the largest when the two servers are far from each other. We measured the bandwidth between two EC2 nodes using \keyword{iperf} and found it to be 2.57 Gbits/sec between two hosts in the same region (US East - Northern Virginia) and 49.8 Mbits/sec between hosts in US East -- Northern Virginia and US West -- Northern California data centers. 
+
+The optimal setting for Local signing with Yao's protocol was for 24 parallel signings, which took 17 hours to produce 24 signatures, costing 28.2 cents per signing at the current AWS on-demand price for a c4.2xlarge node of 39.8 cents per hour. Dual execution achieved the best results at 16 parallel signings taking 25.5 hours to do so and costing 63.3 cents per signing. For nodes in the same region, Yao's protocol performed the best for 32 parallel signings, taking 14.1 hours and costing 32.6 cents per signing. Whereas, dual execution performed the best for 24 parallel signings, taking 19.6 hours and costing 65 cents per signing. These results are as expected, since the extra latency between the nodes means additional parallel processes can take advantage of delays waiting for network traffic.
+
+The cost of bandwidth within an AWS data center is free, so for the Local and Same Region scenarios, only computation cost matters. For cross-country signings, we found best  latency results with 72 parallel signings for Yao's protocol and 40 parallel signings for dual execution. The cost for this scenario is dominated by the cost of bandwidth, since circuit execution requires transmitting over 400 GiB of data.
+At AWS bulk transfer cost of 2 cents per GB across different regions of AWS, the total cost per signing came as \$8.54 for Yao's protocol and \$17.07 for dual execution. 
+
+These costs seem high, and what AWS charges is probably an over-estimate of what it would actually cost to do this at scale and bandwidth costs vary substantially across cloud providers. Nevertheless, we believe they are already low enough for joint signing to be practical for high-value certificates. For instance, Symantec, which charges a \$500/year premium for ECC over RSA/DSA certificate, could easily absorb such bandwidth costs in the margins available for premium certificates, and compared to the human costs of validating identities for EV certificates these costs are minor.
+
+%\dnote{what happened to the earlier discussion about what commercial certs cost? to me, that is what makes this practical. the results for Let's Encrypt below suggest that it is not yet cheap enough to be practical for them.} \bnote{I am removing Let's Encrypt comparison, as it makes our approach look expensive, instead I have added reference to Symantec which already charges $500/year}
+%Assuming that a certificate authority such as Let's Encrypt signs an average of 0.6 million~\cite{lets_encrypt_cost} certificates a day, the daily cost to sign these certificates through our MPC design where both hosts are in the same data center is approximately \$66,000 to run Yao's Protocol and \$148,000 to run Dual Execution. For a typical certificate authority with their own servers, the cost to adopt our secure two-party computation is much lower. With these costs, we have demonstrated that it is possible for a free certificate authority to compute its certificate signing through MPC on two servers in the same region. Due to the data transfer costs, however, only commercial certificate authorities would be able to support jointly signing a certificate across regions.  
+
+\shortsection{Cost Breakdown} The garbled circuit used for signing contains 21.97 billion gates. Since we use the half-gates technique as implemented by Obliv-C, we need to send two 80-bit ciphertexts for each gate (160 bits total). This amounts to 409.18 GiB of total data transfer. The measured total bandwidth required for a signing is 409.72 GiB, indicating that all the other aspects of the protocol (including the OT to obtain input wires, output reveal, and other network overhead) are less than 0.54 GiB (<\%0.132) of the total. The data transfer overhead is approximately double for dual execution protocol as it requires two rounds of Yao's protocol execution.
+
+%\dnote{include the OT in this also - with a bandwidth column added (since gates doesn't make sense for this}
+Since the garbled circuit transfer dominates the cost of decentralized signing, we break down the cost of its component operations in terms of number of non-XOR gates and the bandwidth to transfer them in Table~\ref{table:operation_cost}. The multiplication and division operations over the 192-bit parameters are much more expensive than addition and subtraction. Then, multiplication and division operations make the modular inverse expensive as it relies on these primitives. The curve multiplication becomes expensive as it repetitively invokes the other operations, and the 19.2 Billion gates needed for this account for nearly the entire cost of the protocol, hence are the best target for optimization efforts.
+
+\begin{table}[tb]
+    \centering
+    \begin{tabular}{|c|c|S[table-format=6.2]|}
+        \hline
+        Operation & \# of Gates & \text{Bandwidth (in MiB)}\\ \hline
+        Addition & 1500 & 0.03 \\
+        Subtraction & 1500 & 0.03 \\
+        Multiplication & 101 000 & 1.93 \\
+        Division & 376 000 & 7.17 \\
+        Modular Inverse & 113 Million & 2155.30 \\
+        Curve Multiplication & 19.2 Billion & 366210.94 \\ \hline
+        %Complete Signing & 21.97 Billion & 418999.64 \\ \hline
+    \end{tabular}
+    \caption{Complexity of individual operations over 192-bit parameters in Garbled Circuit protocol}
+    \label{table:operation_cost}
+\end{table}
+
+\shortsection{Signing across Cloud Services} In most important scenarios, the certificate authorities would not want to rely on a single cloud service provider due to either trust or privacy issues or due to having legal obligations to a specific service provider. We performed experiments for signing between an AWS instance and an Azure instance in the same region (US East), both with same configuration.  The cost to transfer data out of AWS service for the first 10 TB per month is 9 cents per GiB~\cite{ec2_instance_pricing}, and for Azure it is 8.7 cents per GiB~\cite{azure_instance_pricing}. The bandwidth between Azure and AWS US East nodes is 1.29 Gbits/sec, and the local runtime for an Azure node is similar to that of the Amazon node. We found that the Yao's protocol obtained the same optimal settings as that of two AWS nodes in the same region. For 32 simultaneous signings, Yao's protocol took 14.1 hours in comparison to 13.1 hours for two AWS nodes in same region. Thus, signing between Amazon and Azure nodes cost around \$37. Though we did not perform signing experiments with dual execution due to cost constraints, we can estimate that running a signing with dual execution across Amazon and Azure nodes would cost around \$74. Although the cost is higher than signing within the same cloud platform, this scenario is still practically feasible for professional certificate authorities that prioritize privacy over cost and can probably obtain bulk bandwidth during low-demand times at much cheaper rates than the costs we modeled.
+
+%\dnote{results should make it clear what was actually run, what is estimated, what it all means}

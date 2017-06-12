@@ -1,0 +1,214 @@
+\section{Design}  \label{sec:design}
+
+%\dnote{don't know what this section will be about from the section title - its the same as the paper title}
+%\TODO{figure out scenario with the client involved}
+
+Implementing a decentralized CA requires protocols for generating a joint signing key (without ever disclosing the private key to any party) and for signing a certificate using a split key. Both of these protocols use secure multi-party computation to allow the two hosts\footnote{We use \emph{hosts} in this presentation as a generic term for the participant in a protocol. As we discuss in Section~\ref{sec:scenarios}, in our case, the hosts could be separate servers operated by a single CA, two separate servers operated by independent CAs, or independent servers operated by a CA and a subject.} that are combining to implement a joint CA to securely compute these functions while keeping their private inputs secret.
+
+We assume that the two hosts have already agreed on the signing algorithm and public elliptic curve parameters (ECDSA in our prototype implementation), and have decided on the methods they will use to validate certificate requests. These methods can be independent, indeed it is best if they are. All that is necessary is that both participants must agree before any certificate can be signed using the joint signing key.
+
+Next, we present the key generation and signing protocols. Section~\ref{sec:security} provides a brief security argument. Section~\ref{sec:scenarios} discusses different ways our protocols could be used.
+
+%The entire signing process is separated into two components: the setup and the MPC. The setup is responsible for processing and generating all the data already known to one or both of the parties, while the MPC carries out the certificate signing and public key generation without revealing any information about the private key shares used for signing. 
+
+%The public key is also generated inside the MPC, it is computed once and made public, and hence is not part of the certificate signing process. \dnote{the public key generation needs to be done once - I think this is important enough, and enough potential confusion about it, that we should have a separate Key Pair Generation subsection}
+
+
+
+% The high-level decentralized CA diagram is shown in Figure~\ref{fig:DecentralizedCAHighLevel}.
+
+%\dnote{separate shortsection on key generation - this is important, and need to explain how the public-private key pair is generated without allowing either party to control it, and without ever constructing the private key in plaintext.  But, key generation is not part of the signing process.} %\hnote{this short section appears later.}
+
+%\dnote{would like to have a figure that shows the whole process starting from the beginning - first, $CA_{A}$ and $CA_{B}$ generate a split private key and publish the corresponding public key; then, a customer requests a signed certificate, show inputs to two signing servers, and generated signature}
+
+
+%\begin{table*}
+%    \centering
+
+
+ %   \begin{tabular}{|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|p{1.5cm}|}
+%        \cline{2-8}
+ %        & \multicolumn{2}{|c|}{Same CA} & \multicolumn{2}{|c|}{Two CAs}  & \multicolumn{3}{|c|}{Subject-CA}\\
+%        \hline
+ %       \multicolumn{1}{|c|}{Generate} & Public Key & Certificate &  Public Key  & Certificate  & Public Key (CA_B, CA_C)
+%       &
+ %      Public Key (sub-CA_A) & Certificate(sub-CA_A) \\
+%        \hline
+%        \multicolumn{1}{|c|}{Party A} & \multicolumn{2}{|c|}{$server_A$}& \multicolumn{2}{|c|}{$CA_A$} & \multicolumn{3}{|c|}{$server_{sub}$}    \\
+ %       \hline
+%        %\multicolumn{1}{|c|}{Party A Input} & $sk_A$ & $sk_A$, $k_A$, $z_A$ & $sk_A$ & $sk_A$, $k_A$, $z_A$  &   &  &  \\
+%        %\hline
+ %       \multicolumn{1}{|c|}{Party B} & \multicolumn{2}{|c|}{$server_B$} & \multicolumn{2}{|c|}{$CA_B$}  &    \multicolumn{3}{|c|}{$CA_{B}$}  \\
+%        \hline
+%        %\multicolumn{1}{|c|}{Party B Input} &  $sk_B$  & $sk_B$, $k_B$, $z_B$  &    $sk_B$  & $sk_B$, $k_B$, $z_B$  & & & \\
+%
+ %       %\hline
+%        \multicolumn{1}{|c|}{Security}          & \multicolumn{2}{|c|}{Secure storage of sk} & \multicolumn{2}{|c|}{Secure storage of sk, 
+%        %reduce chance of cert mistakes
+%        %
+%        }  & \multicolumn{3}{|c|}{Secure storage of sk, 
+%        %reduce chance of cert mistakes, mission from subject
+%        }\\
+%        \hline
+%    \end{tabular}
+%    \caption{The different setups for our decentralized CAs. combine Same CA/Two CAs. Two separate tables; summarizing the two deployment scenarios, part A, party B, scenario. 2nd table - protocol desription, what are the inputs and outputs. clear from the protocols }
+%    \label{fig:dca_setup}
+    
+%\end{table*}
+
+\subsection{Key Pair Generation}\label{sec:keygeneration}
+
+Before a pair of hosts can perform joint signings, they need to generate a joint public-private key pair. This is a one-time process and is independent of the certificate signing protocol. At the end of this process, a joint public key is published and each host has a share of the corresponding private key. The private key never exists in any unencrypted form, so the only exposure risks are if \emph{both} hosts are compromised or the MPC protocols are corrupted.
+
+Figure~\ref{fig:public_key_protocol} illustrates the key pair generation protocol. To begin, each host generates a random value that will be its private key share: $sk_A$ (owned by party $A$) and $sk_B$ (owned by party $B$). These are drawn uniformly randomly from the range $[0, p-2]$.  The master private key, $sk = (sk_A + sk_B) \mod (p - 1) + 1$, is in the range $[1, p-1]$. Because of the properties of modular addition, this key will be uniformly randomly distributed in $[1, p-1]$, even if one of the input keys is not.  The private key, $sk$, is not revealed to either of the parties and will only be represented by encrypted wire labels inside the MPC signing protocol.  
+
+%The public key is then generated by elliptic curve point multiplication operation $pk = sk \times G$. This is computed using an MPC where the inputs are each party's private key share. 
+Within the MPC, the key shares are combined to produce $sk$ as described above, and the elliptic curve point multiplication is performed to generate the public key $pk = sk \times G$. This value is revealed as the output to both the parties. Section~\ref{subsec:pointMult} provides details on how curve point multiplication is implemented, which is used in both key generation and signing.
+
+%\dnote{got to here}
+
+\subsection{Signing a Certificate}\label{sec:signing}
+
+Once a pair of hosts have generated a joint key pair, they can jointly sign certificates using the shared private key without ever exposing that key.
+The inputs to the signing protocol are the key shares ($sk_A$, $sk_B$), the random number shares ($k_A$, $k_B$), and the message to be signed, $z$. The key shares are those that were used as the inputs to the key pair generation protocol to produce the joint key pair.
+
+Each signing server generates an $L_n$-length random integer in the range [$0, p-2$] that will be its share of the random number $k$, needed for ECDSA signing.  These shares, $k_A$ and $k_B$, are inputs to the MPC protocol and will be combined to obtain  $k = (k_A + k_B) \mod (p - 1) + 1$ (which is uniform in the range [$1, p-1$]) inside the protocol so neither party can control $k$. 
+% \dnote{I don't think this is actually necessary - it doesn't corrupt things if one party chooses a $k_P$ outside this range}
+%The circuit verifies inside the MPC that both $k_A$ and $k_B$ are in the range [$0, p-2$] so that the value of $k$ is in the finite field $\mathbb{F}_p$.
+
+Both hosts must agree on the same TBSCertificate to be signed, and use whatever out-of-band mechanisms they use to validate that it is a legitimate certificate request.
+As specified by ECDSA, the input to the signing function, $z$, is the $L_n$ left-most bits of $\textrm{\em Hash}$($\textrm{\em TBSCertificate}$), where $L_n$ is bit length of the group order $n$~\cite{elliptic_curve_digital_signature_algorithm}.  Both parties compute $z$ independently, and feed their input into the MPC (these are denoted as $z_A$ and $z_B$ in Figure~\ref{fig:cert_signing}). There is no secret involved in computing $z$, but it is essential that both parties know and agree to the certificate they are actually signing. Hence, both parties provide their version of $z$ as inputs to the secure computation, so there is a way to securely verify they are identical.
+
+The signing algorithm first compares the inputs $z_A$ and $z_B$ to verify that the two parties are signing the same certificate. Then,  $k$ and $sk$ are obtained by combining the shares from both the parties as explained above. The remaining steps follow the ECDSA signing algorithm mentioned in Section~\ref{sec:ecdsa}. At the end of the protocol, the certificate signature pair ($r, s$) is revealed to both parties. In rare instances, the signing algorithm may result in $r = 0$ or $s = 0$, in which case the whole process is repeated by both the parties with different values of $k_A$ and $k_B$.  To avoid any additional disclosure in the dual execution model, however, it is necessary to complete the signing process even when $r = 0$ and perform the secure equality test on the result so there is no additional leakage opportunity for an adversarial generator.
+
+%\dnote{what to do about $r = 0$ or $s = 0$?}
+%. The two numbers correspond to the individual signing server's private key shares, $sk_A$ and $sk_B$, and random number shares, $k_A$ and $k_B$. During each subsequent signing, only the random number shares are regenerated.  \dnote{this is confusing - separate key generation (already has $sk_i$) from signing}
+
+%The hashed message $z$, private key shares and random number shares, and curve parameters $(p, a, b, G_x, G_y, n)$ are then fed into the MPC.   \dnote{I don't understand what the curve parameters are inputs to MPC - aren't these known, public parameters, that should be baked into the circuit? I would think the inputs to the MPC from $A$ are $sk_A, k_A, z$ and that's all.}
+
+% Dave: I didn't find an example I was totally happy with, and looking at a sample of recent crypto papers/books, people seem to do all sorts of different things with no standard. I've made a few tweaks to this to be more like what I think we should do, but not totally happy with it yet...
+
+\begin{figure*}[bt]
+\begin{center}
+\procedure{Public Parameters: CURVE = ($p$, $a$, $b$, $G$, $n$, $h$), $L$}{
+\textbf{Party A} \< \< \< \< \textbf{Party B}\\[][]
+sk_A \gets \{0,1\}^L\< \< \< \< sk_B \gets \{0,1\}^L \\
+\< \sendmessageright{top=$\obliv{sk_A}$} \< \;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\textbf{MPC} %this should be centered in column
+\<  \sendmessageleft{top=$\obliv{sk_B}$}\<  \\
+\< \<  sk \gets (sk_A + sk_B) \, mod \, (p-1) + 1 \< \<\\
+\< \<  pk \gets sk \times G \< \<\\
+\< \sendmessageleft{top=$pk$} \< \<   \sendmessageright{top=$pk$} \< \< \< \<}
+\end{center}
+
+\caption{Protocol for generating key pair,
+{\sc GenerateKeyPair}: $sk_A; sk_B \rightarrow pk; pk$. {\rm Party A generates one share of secret key, $sk_A$, and Party B generates other share, $sk_B$. The output of protocol is public key, $pk$, that pairs with $sk = sk_A \oplus sk_B$.}
+}
+\label{fig:public_key_protocol}
+\end{figure*}
+
+
+\begin{figure*}
+\begin{center}
+\procedure{Public Parameters:  CURVE = $(p, a, b, G, n, h)$, $L$}{
+ \textbf{Party A} \<\< \;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\textbf{MPC} \<\< \textbf{Party B}\\
+  \text{Inputs: $\text{\em tbsCert}_A$, $sk_A$} \<\< \textbf{} \<\< \text{Inputs: $\text{\em tbsCert}_B$, $sk_B$}\\%[][\hline]
+z_A \gets \text{Hash}(\text{\em tbsCert}_A) \<\<  \<\< z_B \gets \text{Hash}(\text{\em tbsCert}_B) \\
+\text k_A \gets \{0,1\}^L \<\<  \<\< \text k_B \gets \{0,1\}^L\\
+\< \sendmessageright*{\obliv{sk_A}, \obliv{k_A}, z_A} \<   \< \sendmessageleft*{\obliv{sk_B}, \obliv{k_B}, z_B} \<  \\
+ \<\<   \text{assert\ $(z_A == z_B)$} \<\< \\
+ \<\<   k \gets (k_A + k_B) \mod (p-1) + 1 \<\<\\
+  \<\<   sk \gets (sk_A + sk_B) \mod (p-1) + 1 \<\<\\
+ \<\<  (u, v) \gets k \times G \<\<\\
+ \<\<  r \gets u \, \mod \, n \<\<\\
+ \<\<  s \gets k^{-1}(z_A + r*sk) \, \mod \, n \<\<\\
+\< \sendmessageleft*{r, s} \<   \< \sendmessageright*{r, s} \<  \\
+\text{\em cert} \gets \text{\em cert}(r,s)\< \< \< \< \text{\em cert} \gets \text{\em cert}(r,s)\\
+}
+
+\end{center}
+\caption{Protocol for generating certificate signature,
+{\sc GenerateCertificateSignature}: $(sk_A, k_A, z_A); (sk_B, k_B, z_B) \rightarrow (r,s); (r,s)$. {\rm Party A generates one share of the random integers, $k_A$, and Party B generates other random integer, $k_B$. The output of protocol is certificate signature, $(r,s)$, signed with secret key shares $sk_A$ and $sk_B$. At the start of this signing protocol, we assume that the two parties have already agreed to issue the certificate and on the contents of it.}}
+
+%GenKeyPair() -> (sk_a, pk), (sk_b, pk)
+
+%separate public parameters
+%inputs to that execution 
+
+%find protocol description for input
+
+%inputs to the MPC are encrypted, angled bracket notation to show tha they're obliv
+
+%ska, ka obliv, za without
+
+%jack's private matching paper 
+
+\label{fig:cert_signing}
+\end{figure*}
+
+\subsection{Security Argument}\label{sec:security}
+
+The above signing algorithm is implemented using both Yao's protocol and dual execution.  The security of our protocols follows directly from the established security properties provided by the underlying MPC protocols we use, so no new formal security proofs are needed.
+
+For semi-honest Yao's protocol, which we do not recommend but include in our cost analysis for comparison purposes,
+one party acts as the circuit generator and the other party acts as the circuit evaluator. The generator creates a garbled circuit encoding the above signing algorithm and passes it to the evaluator along with the wire labels corresponding to his inputs. The evaluator obtains the wire labels for its inputs using extended oblivious transfer, and gets the result of the computation. For instance, if party $A$ is the generator, then $A$ passes the circuit along with the wire labels corresponding to $k_A$, $sk_A$ and $z_A$ to party $B$, who acts as the evaluator. Party $B$ obliviously requests the wire labels corresponding to $k_B$, $sk_B$ and $z_B$ from $A$, and evaluates the circuit, which first asserts $z_A == z_B$. Revealing the assertion failure at this point leaks no information, since it only depends on the non-secret $z$ inputs. If the assertion passes, it proceeds to obliviously combine the input shares to compute the $k$ and $sk$ to be used in the signing. A sanity check is also embedded to ensure that the shares $k_A$, $sk_A$, $k_B$ and $sk_B$ are in the proper range (although a host that provides invalid inputs would not obtain any advantage since they are combined with the other host's random shares using modular arithmetic). The circuit computation finally outputs the signature pair ($r, s$), or outputs an error message if either $r = 0$ or $s = 0$. The output is revealed to both parties. 
+
+Since, the semi-honest protocol is not secure against malicious adversaries, a malicious generator can manipulate the circuit to produce a bad certificate (i.e., obtain signature for a different certificate than for the agreed-upon message $z$) or to leak bits of the other party's secret key shares in the output (which could still appear to be a valid signature on $z$).  An easy attack would be to generate a few different valid signatures with low fixed values of $k$ (which could be done with small sub-circuits), and then select among these in a way that leaks bits of the other host's private key share.
+
+For these reasons, we do not think it is advisable to perform something as sensitive as certificate signing using only semi-honest security. Instead, we use the dual execution protocol to provide active security with a single bit leakage risk. With dual execution, Yao's protocol is executed twice with both the parties switching their roles in the consecutive runs, i.e. if party $A$ is the generator in the first execution, it then becomes the evaluator in the next execution. However, the main difference is that the output of both the runs is revealed only after passing a maliciously-secure equality test that ensures that the semantic outputs of both the executions are identical. This ensures that neither of the parties deviated from the protocols and, as a consequence, generated a bad certificate.  We use a maliciously secure extended OT protocol~\cite{ishai2003extending} to obtain the inputs, so the only leakage possibility is the one-bit selective failure predicate.
+
+In some applications, the risk of leaking an arbitrary one-bit predicate on private inputs would be severe. For our key signing protocol, however, it is negligible.  The best a malicious adversary can do is leak a single bit of the other party's private key share for each execution, with a probability of $\frac{1}{2}$ of getting caught. The signing algorithms used have sufficient security margins that leaking a few bits is unlikely to weaken them substantially, and the participants in a joint CA have a strong incentive to not be caught cheating.
+
+\subsection{Scenarios}\label{sec:scenarios}
+\label{sec:dca_setup}
+We consider using our decentralized CA in three different settings: jointly computing the signature and public key by (1) a single CA that wants to protect its own signing keys by distributing them among its own hosts, (2) two independent CAs who want to jointly mitigate the risks of key exposure or misuse, and (3) a CA and subject who wants to protect itself from a CA generating rogue certificates by being directly involved in the certificate signing process.
+
+The first two scenarios are identical technically, just differ in the out-of-band processes that are used to validate a certificate request.  In the first scenario, the risk of key exposure is reduced by never storing the key in a physical form in one place. The two hosts with key shares can be placed in different locations, protected by different physical mechanisms and people. The decision to generate a certificate is still made in a centralized way, and a single organization controls both key shares.  
+
+In the second scenario, the two hosts are controlled by different organizations. Each could implement its own policy and methods for validating a certificate request. This reduces the risks of mistakes and insider attacks since people in both organizations would need to collude (or be tricked) in order for such an attack to succeed.  By agreeing to a joint signing process, the two organizations could also enter an agreement to share liability for any inappropriate certificates signed by the joint key.
+
+In the third scenario, the subject, $S$, holds the power to creating its own certificate by owning a share of the private key that is used to generate the signature. The subject and $CA_A$ first jointly create a public key using the key generation protocol. In order of this newly generated public key to be trusted, a certificate is needed that vouches for this public key as part of a key pair which is jointly owned by $CA_A$ and $S$.  To support decentralization, this certificate should be signed by a joint CA comprising two different CAs, $CA_B$ and $CA_C$. Both $S$ and $CA_A$ will make independent requests to $CA_B$ and $CA_C$ to sign a joint certificate that associates the generated $pk$ with subject ($S, CA_A$). After validating these requests, $CA_B$ and $CA_C$ will perform a joint signing protocol to generate a signed certificate that attests to $pk$ being the public key associated with the joint ($S, CA_A$) entity.  With this, $S$ and $CA_A$ can jointly produce a new certificate that attest to a new key pair, which is validated by the certificate chain from the joint ($CA_B, CA_C$) certificate authority. For this scenario to add value, it is important that browsers trust the joint root key of $(CA_B, CA_C)$, but not fully trust the root key of $CA_A$ (otherwise, $CA_A$ could still generate its own certificates attesting to $S$). (We discuss deployment issues further in Section~\ref{sec:discussion}.)
+
+%\begin{table*}[t]
+%\begin{center}
+%\begin{tabular}{ |c|c|c|c|c| } 
+%\hline
+% & \makecell{Local \\ (one machine)} & \makecell{Same Region \\ (2 US East)} & \makecell{Same Country \\ (US East+West)} & \makecell{AWS+Azure \\ (Both US East)}\\
+%\hline
+%Yao, 1 p & 2.1 (6.3 c256)  & 2.2 &  22.1 & 2.7\\ 
+%4 p & 3.2, .89& 2.4, .61& & 2.81, 0.70\\
+%8 p & 5.74, .72 &  3.5, .44& & 3.73, 0.47\\
+%16p & 11.4, .72 & & & 7.16, 0.45\\
+%24 p & \textbf{17.2, .71, 24bytes: 17.0} & 10.0, .42, 9.6 & & 10.62, 0.44\\
+% 32 p &  22.8,.71,  (67.2 c256) &  \textbf{13.4, .42, 24bytes: 13.1}  & 21.1, .66 & \textbf{14.14, 0.44, 24bytes: 14.09}\\
+ 
+%40 p &  28.6, .72 &  16.7, .42  & 24, .6 , &  17.59, 0.44\\
+%48 p &  &  &   25.7, .54& \\
+%56 p &40.1, .72,  & 23.5, .42, 24bytes: 22.5& 27.5, .49 & \\
+%64 p & & & 29.9, .47, 24bytes; 28.9 & \\
+%72 p & & & \textbf{33.8, .47, 24bytes:31.3 }& \\
+ 
+%\hhline{|=|=|=|=|=|}
+
+
+%Dualex, 1 p &  2.6, 32bytes:8.0 &  2.8 & 20.2, & \\
+%2 p & 3.7, 1.8 &2.8, 1.4 & & \\
+%4 p &6.5, 1.6&3.8, .94 &&\\
+
+%8 p & 12.9, 1.6 & 6.7, .84  & & \\
+%16 p & \textbf{25.8, 1.6, 24bytes: 25.5
+%}  &  13.2, .83 & & \\
+
+%24 p & 38.6, 1.6 & \textbf{19.9, .83, 
+%24bytes: 19.6}  &  23.7, .99 & \\
+%32 p & & & 28.0, .88 & \\
+%40 p & & 33.1, .83 & \textbf{34.9, .87, 24bytes:34.3
+%} &  \\
+%48 p & & &49.8, 1.0 &  \\
+
+
+%\hline
+%\end{tabular}
+%\end{center}
+%\caption{Test table. This table is to keep track of all the performance measurements. Not all of the numbers here will make it to the final table. x p stands for the number of parallel scans we ran on one machine. }
+%\label{fig:performance_table2}
+%\end{table*}

@@ -1,0 +1,71 @@
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{decentralized_ca}
+
+%\clearpage 
+
+\appendix
+\section{ECDSA code in Obliv-C}
+Obliv-C framework is an extension of C and hence, the syntax of the code remains the same, but with some Obliv-C specific keywords and functions.  The code snippet for ECDSA in Obliv-C is shown below.
+
+\small{
+\begin{lstlisting} 
+1. void signCertificate(void * args){
+2.   obig k1, k2, k, ...;
+3.   obliv uint8_t k1_c[MAXN], k2_c[MAXN], ...;
+
+4.   obig_init(&k1, MAXN);
+5.   obig_init(&k2, MAXN);
+6.   //... and so on
+  
+7.   feedOblivCharArray(k1_c, io->k1, MAXN, 1);
+8.   feedOblivCharArray(k2_c, io->k2, MAXN, 2);
+9.   //... and so on
+
+10.  obig_import_opointed_be(&k1, k1_c, MAXN);
+11.  obig_import_opointed_be(&k2, k2_c, MAXN);
+12.  //... and so on 
+  
+13.  for (int i = 0; i < E_LENGTH; i++) {
+14.    e1[i] = ocBroadcastChar(io->e1[i], 1);
+15.    e2[i] = ocBroadcastChar(io->e2[i], 2);
+16.  }
+  
+17.  assert(compare(e1,e2,E_LENGTH));
+18.  obig_import_pointed_be(&e, e1, E_LENGTH);
+
+19.  obig_xor(&pk, pk1, pk2);
+20.  obig_xor(&k, k1, k2);
+  
+21.  curveMult(&R_x, &R_y, G_x, G_y, k, a, p);
+22.  obig_div_mod(&tmp, &r, R_x, n);
+23.  r_comp_result = obig_cmp(r, zero);
+24.  revealOblivInt(&io->RisZero, r_comp_result, 0);
+
+25.  mult_inverse(&k_inverse, k, n);
+26.  obig_mul(&interim, r, pk);
+27.  obig_add(&interim, e, interim);
+28.  obig_div_mod(&tmp, &interim_mod, interim, n);
+29.  obig_mul(&interim, k_inverse, interim_mod);
+30.  obig_div_mod(&tmp, &s, interim, n);
+31.  s_comp_result = obig_cmp(s, zero);
+32.  revealOblivInt(&io->SisZero, s_comp_result, 0);
+
+33.  for(int i = 0; i < r.digits; i++)
+34.    revealOblivChar(&io->r[i], r.data[i], 0);
+
+35.  for(int i = 0; i < s.digits; i++)
+36.    revealOblivChar(&io->s[i], s.data[i], 0);
+
+37.  obig_free(&k1);
+38.  obig_free(&k2);
+39.  //... and so on  
+40. }
+\end{lstlisting}
+}
+
+Line 2 declares the `\texttt{obig}' variables for storing curve parameters, signing keys and message to be signed. `\texttt{obig}' variables can store any arbitrary length big numbers and support basic arithmetic operations like addition, subtraction, multiplication and division. We require `\texttt{obig}' variables to store the 192-bit curve parameters for our implementation of `\texttt{secp192k1}'. Line 3 declares `\texttt{obliv}' variables which are used to temporarily store the random number and key shares. Lines 4--6 initialize the `\texttt{obig}' variables. The content of these variables is not revealed to any party, unless \texttt{revealObliv<Type>()} function is invoked explicitly. Lines 7--12 load the random number and key shares from the two parties, such that $k_1$ is loaded from party 1 and $k_2$ is loaded from party 2, and so on.
+
+Before the certificate signing process begins, the hash of `\texttt{tbsCert}' from both the parties are to be negotiated. Both the parties load their hash values $e_1$ and $e_2$ in plain text (lines 13--16). Next, assertion is done in line 17, where we compare that both the hash values $e_1$ and $e_2$ are equal. The signing process continues only if the assertion passes, otherwise the protocol is terminated. Next, the private key shares and random number shares are combined in lines 19 and 20. ECDSA certificate signing is performed in lines 21--32 according to Section~\ref{sec:ecdsa}. Finally, signature pair $(r, s)$ is revealed to both the parties (lines 33--36), and this concludes the MPC protocol.
+
+The same code can be easily switched between Yao's protocol and Dual Execution protocol. In order to execute Yao's protocol, `\texttt{signCertificate()}' function is passed as an argument to `\texttt{execYaoProtocol()}' function in a wrapper code. To run Dual Execution, `\texttt{signCertificate()}' function is passed as an argument to `\texttt{execDualexProtocol()}' function in the wrapper code.

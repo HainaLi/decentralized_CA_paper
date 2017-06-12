@@ -1,0 +1,123 @@
+\usepackage{array, epsfig, endnotes}
+\usepackage{pifont}
+\usepackage{wasysym, booktabs, rotating, multirow, adjustbox}
+\usepackage{hyperref, cleveref,listings}
+\usepackage{threeparttable}
+
+%\usepackage[hyphens]{url}
+%\usepackage{times}
+\usepackage{textcomp}
+%%!\usepackage{mathptmx}
+\usepackage{epstopdf}
+\usepackage{verbatim}
+\usepackage{subfigure}
+\usepackage{stmaryrd}
+\usepackage{multirow}
+\usepackage{listings}
+\lstdefinelanguage[]{OblivC}[]{C}{morekeywords={obliv,obig,frozen,bool},sensitive=true,mathescape=true, numbers=left}
+\newcommand\oblinline{\lstinline[language=OblivC,basicstyle=\small\sffamily,columns=fullflexible]}
+\lstnewenvironment{OblivC}[1][]{\lstset{language=OblivC,%                                                    
+    basicstyle=\small\sffamily,showstringspaces=false,columns=fullflexible,#1}}{}
+\lstnewenvironment{PlainC}[1][]{\lstset{language=C,%                                                         
+    basicstyle=\small\sffamily,showstringspaces=false,columns=fullflexible,#1}}{}
+%\newcommand\obliv{\oblinline|obliv|}
+\newcommand\oblivif{\oblinline|obliv if|}
+\newcommand\frozen{\oblinline|frozen|}
+\newcommand{\obliv}[1]{{\ensuremath\left\langle#1\right\rangle}}
+\newcommand{\oblivelse}{\obliv{\textbf{else}}}
+\newcommand{\arrayElt}[2]{{\ensuremath{#1}_{#2}}}
+\newcommand{\oarrayElt}[2]{\obliv{{#1}}_{#2}}
+
+\newcommand{\sfize}[2]{\newcommand#1{\ensuremath{\mathsf{#2}}\xspace}}
+\newcommand{\osfize}[2]{\newcommand#1{\ensuremath{\obliv{\mathsf{#2}}}\xspace}}
+
+\usepackage{siunitx}
+\usepackage{color}
+%\usepackage[sort]{cite}
+\usepackage{graphicx}
+\usepackage{graphics}
+\usepackage{epsfig}
+\usepackage{amsmath, amsfonts}
+\usepackage{comment}
+\usepackage{enumitem}
+\usepackage[linesnumbered,ruled]{algorithm2e}
+%\usepackage{algorithm}
+%\usepackage{algorithmic}
+\usepackage{algpseudocode}
+\usepackage{varwidth}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{xspace}
+\usepackage{multirow}
+%\usepackage{makeidx}
+\usepackage{threeparttable}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{color}
+%\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage{hhline}
+\usepackage{makecell}
+\usepackage{cryptocode}
+
+\newcommand\shortsection[1]{\vspace*{6pt}{\noindent\bf #1.}}
+
+\newcommand{\dnote}[1]{\textcolor{blue}{\bf \emph{Dave: #1}}}
+\newcommand{\hnote}[1]{\textcolor{red}{\bf \emph{Haina: #1}}}
+\newcommand{\bnote}[1]{\textcolor{purple}{\bf \emph{Bargav: #1}}}
+
+\newcommand{\TODO}[1]{\textcolor{blue}{TODO:#1}}
+\newcommand\keyword[1]{{\sf\small{#1}}}
+
+%\algnewcommand{\AND}{\textbf{and}}
+%\algnewcommand{\NOT}{\textbf{not}}
+
+\newcommand{\todo}[1]{\textcolor{orange}{\bf \emph{TODO: #1}}}
+\newcommand{\code}[1]{{\small\lstinline!#1!}}
+\newcommand{\toolName}{SSOScan\xspace}
+\newcommand{\var}[1]{{\ttfamily#1}}% variable
+
+
+%\lstdefinelanguage{JavaScript}{
+  %keywords={typeof, new, true, false, catch, function, return, null, catch, switch, var, if, in, while, do, else, case, break, eval, window},
+  %keywordstyle=\color{blue}\bfseries,
+  %ndkeywords={class, export, boolean, throw, implements, import, this},
+  %ndkeywordstyle=\color{darkgray}\bfseries,
+  %identifierstyle=\color{black},
+  %sensitive=false,
+  %comment=[l]{//},
+  %morecomment=[s]{/*}{*/},
+  %commentstyle=\color{purple}\ttfamily,	
+  %stringstyle=\color{red}\ttfamily,
+  %morestring=[b]',
+  %morestring=[b]"
+%}
+
+%\lstset{language=JavaScript,
+    %basicstyle=\sffamily,
+    %stringstyle=\sffamily,
+%    size=\small,
+    %keywordstyle=\bfseries,
+    %showstringspaces=false,
+    %columns=fullflexible,             
+    %morekeywords={document, printf}
+%}
+
+\newcommand{\subcap}[1]{\vskip 0.5ex\centering{\parbox{7.5cm}{\footnotesize #1}\vskip 1ex}}
+\newcommand{\subcapw}[1]{\centering{\parbox{16cm}{\footnotesize #1}\vskip 1ex}}
+\renewcommand{\textrightarrow}{$\rightarrow$}
+
+\renewcommand{\topfraction}{0.9}	% max fraction of floats at top
+\renewcommand{\bottomfraction}{0.8}	% max fraction of floats at bottom
+    %   Parameters for TEXT pages (not float pages):
+\setcounter{topnumber}{8}
+\setcounter{bottomnumber}{8}
+\setcounter{totalnumber}{10}     % 2 may work better
+\setcounter{dbltopnumber}{10}    % for 2-column pages
+\renewcommand{\dbltopfraction}{0.9}	% fit big float above 2-col. text
+\renewcommand{\textfraction}{0.2}	% allow minimal text w. figs
+    %   Parameters for FLOAT pages (not text pages):
+\renewcommand{\floatpagefraction}{0.5}	% require fuller float pages
+	% N.B.: floatpagefraction MUST be less than topfraction !!
+\renewcommand{\dblfloatpagefraction}{0.5}	% require fuller float pages
+
+\newcommand{\domain}[1]{{\tt #1}}

@@ -1,0 +1,57 @@
+\section{Implementation}\label{sec:implementation}
+
+For our multi-party computation, we utilize the Obliv-C framework~\cite{cryptoeprint:2015:1153} that includes the latest enhancements to Yao's garbled circuits protocol~\cite{yao1986generate} including garbled row reduction~\cite{naor1999privacy, pinkas2009secure}, free XOR~\cite{kolesnikov2008improved}, fixed-key AES garbling~\cite{bellare2013efficient} and half-gates~\cite{zahur2015two}. These reduce the number of ciphertexts transmitted per non-XOR gates to 2, while preserving XOR gates with no ciphertexts or encryption operations. Apart from the Yao's protocol~\cite{yao1982protocols, yao1986generate} for garbled circuits that is secure against semi-honest adversaries, Obliv-C also implements the dual execution protocol~\cite{huang2012quid} to provide security against malicious adversaries. The Obliv-C framework compiles an extended version of C into standard C, converting an arbitrary computation into a secure computation protocol by encoding it into a garbled circuit. It achieves performance executing two-party garbled circuits comparable to the best known results, executing circuits approximately 5 million gates per second over a 1Gbps link. 
+
+\subsection{Big Integer Operations}
+
+Since Obliv-C is based on C, it naturally extends all the basic C data types and the operations over them. However, ECDSA requires computation over large curve parameters of size in the range of 192, 256, 384 and 512 bits. We use the Absentminded Crypto Kit~\cite{absentminded_crypto_kit}, which is built over Obliv-C framework, to support secure computation over arbitrarily large numbers. We implement ECDSA over the standard NIST curve \texttt{secp192k1}~\cite{elliptic_curve_domain_parameters}, although our implementation can be easily adopted for any standard elliptic curve. While the Absentminded Crypto Kit provides basic operations like addition, subtraction, multiplication and division over arbitrarily large numbers, the ECDSA algorithm requires modular arithmetic operations. Hence we are required to handle the underflows and overflows in the intermediate computations, thereby increasing the number of invocations of basic arithmetic operations over big numbers. This impacts the overall computation cost (we discuss the cost of these individual operations in Section~\ref{sec:performance}, Table~\ref{table:operation_cost}).
+
+
+
+%\dnote{I thought there were a lot of other issues that you encountered in implementation, like how to check $z_A$ = $Z_B$, when/what to reveal, etc. any issues in bignum implementation? etc.?} 
+%\bnote{All the tricks used in MPC, with emphasis on BigNum}
+%\bnote{cost for add, sub, mult, div, inverse, curve mult.. in terms of number of gates}
+
+\subsection{Curve Point Multiplication}\label{subsec:pointMult}
+
+The most expensive step in ECDSA (for both key generation and signing) is the curve point multiplication protocol.  In order to calculate $k \times G$ efficiently, where $k$ is a positive integer and $G$ is the elliptic curve base point, we implement the double-and-add procedure (Algorithm~\ref{alg:double_and_add}), which invokes the \keyword{pointAdd} and \keyword{pointDouble} subroutines $L_n$ number of times at the most, where $L_n$ is the number of bits of $k$. In comparison, a na\"{\i}ve curve multiplication procedure would require $k$ invocations of \keyword{pointAdd}, where $k$ is a large value in the range [$1, p - 1$], where $p$ is the curve parameter of the order $2^{L_n}$.
+
+Normally, the double-and-add procedure is prone to timing side-channel attacks since the number of executions of the \keyword{if} block reveals the number of bits set in $k$. Within an oblivious computation, however, the actual value of the predicate is not known and all paths must be executed obliviously. This means there can be no timing side-channels since all of the executing code is operating on encrypted values. 
+In our implementation, this is made explicit with the \oblivif\ in Obliv-C, which must be used when the predicate involves oblivious values. It obliviously executes both branches, but ensures (obliviously) that the computation inside the block takes effect only if the predicate was true.
+
+\begin{algorithm}[tb]
+    \underline{curveMult} ($k, G$)\;
+    $N \gets G$\;
+    $Q \gets 0$\;
+    \For{ bit position $ i \gets 0 \text{ to } L_n$}{
+        \If{$k_i = 1$}{
+          $Q \gets \text{pointAdd(}Q, N\text{)}$\;
+        }
+        $N \gets \text{pointDouble(}N\text{)}$\;
+    }
+    \Return $Q$\;
+    \caption{Double-and-Add Based Point Multiplication}
+    \label{alg:double_and_add}
+\end{algorithm}
+
+\begin{figure}[tb]
+    \centering
+    \begin{tabular}{l|l}
+        \texttt{pointAdd}($Q, N$) $\rightarrow$ ($R_x, R_y$) & \texttt{pointDouble}($N$) $\rightarrow$ ($R_x, R_y$) \\ \hline
+        $\lambda = \text{(}N_y - Q_y\text{)} \times \text{(}N_x - Q_x\text{)}^{-1}$ & $\lambda = \text{(}3N_x^2 + a\text{)} \times \text{(}2N_y\text{)}^{-1}$ \\
+        $R_x = \lambda^2 - Q_x - N_x$ & $R_x = \lambda^2 - 2N_x$ \\
+        $R_y = \lambda\text{(}Q_x - R_x\text{)} - Q_y$ & $R_y = \lambda\text{(}N_x - R_x\text{)} - N_y$ \\
+    \end{tabular}
+    \caption{Eliptive Curve Point Operations}\label{fig:pointops}
+\end{figure}
+
+The procedures \texttt{pointAdd} and \texttt{pointDouble} output the resulting curve point $R$, following the equations in Figure~\ref{fig:pointops}. All the operations are modulo $p$, where $p$ and $a$ are the elliptic curve parameters explained earlier. Here ($N_x - Q_x$)$^{-1}$ and ($2N_y$)$^{-1}$ are modular inverse operations, implemented efficiently using the Extended Euclidean algorithm.
+%\dnote{I don't understand what $R$ is in the return here - is it the point $(R_x, R_y)$?  If so, just make the header $\text{\tt{pointAdd}}(Q, N) \rightarrow (R_x, R_y)$ and remove the return}
+
+%\dnote{I'm not sure what readers should get from this - is there something new in the implementation section, or anything specific to MPC implementation?  We claim to be optimizing things to perform well within MPC, but no description of optimizations}
+
+%\dnote{did we provide background on DualEx somewhere?}
+
+\subsection{Dual Execution} 
+In dual execution, the protocol must follow feed-compute-reveal flow, such that all the inputs are required to be fed into the garbled circuit in the beginning and only then the computation can be performed, and finally the output is revealed in the end. This is important to satisfy the requirements of the dual execution security proof. Thus, it is not valid to feed in some input during the computation or to reveal any output before the completion of computation. Hence, in the ECDSA algorithm, we cannot reveal to the parties if $r = 0$ or $s = 0$ while the computation is in progress. %Although, this is possible in Yao's protocol, we, however, defer revealing the output to the end to prevent timing side-channel attacks. 
+An exception to feed-compute-reveal flow is the assertion of TBSCertificate hashes generated by both the parties $z_A == z_B$ in the beginning, where both $z_A$ and $z_B$ are in plain text and hence are not part of the garbled circuit computation. This allows us to break the computation in case the assertion fails, and does not breach privacy since the message hashes are public values.

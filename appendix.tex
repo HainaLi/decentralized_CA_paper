@@ -1,0 +1,66 @@
+\section{ECDSA code in Obliv-C}
+
+Obliv-C framework is an extension of C and hence, the syntax of the code remains the same, but with some Obliv-C specific keywords and functions.  The code snippet for ECDSA in Obliv-C is shown below.
+
+\begin{OblivC} 
+void signCertificate(void * args) {
+    obig k_A, k_B, k, ...;
+    obliv uint8_t k_A_array[MAXN], k_B_array[MAXN], ...;
+
+    obig_init(&k_A, MAXN);
+    obig_init(&k_B, MAXN);
+    //... and so on
+  
+    feedOblivCharArray(k_A_array, io->k_A, MAXN, 1);
+    feedOblivCharArray(k_B_array, io->k_B, MAXN, 2);
+    //... and so on
+
+    obig_import_opointed_be(&k_A, k_A_array, MAXN);
+    obig_import_opointed_be(&k_B, k_B_array, MAXN);
+    //... and so on 
+  
+    for (int i = 0; i < Z_LENGTH; i++) {
+        z_A[i] = ocBroadcastChar(io->z_A[i], 1);
+        z_B[i] = ocBroadcastChar(io->z_B[i], 2);
+    }
+  
+    assert(compare(z_A, z_B, Z_LENGTH));
+    obig_import_pointed_be(&z, z_A, Z_LENGTH);
+
+    combine_shares(&sk, sk_A, sk_B);
+    combine_shares(&k, k_A, k_B);
+  
+    curveMult(&R_x, &R_y, G_x, G_y, k, a, p);
+    obig_div_mod(&tmp, &r, R_x, n);
+    r_comp_result = obig_cmp(r, zero);
+
+    mult_inverse(&k_inverse, k, n);
+    obig_mul(&interim, r, sk);
+    obig_add(&interim, z, interim);
+    obig_div_mod(&tmp, &interim_mod, interim, n);
+    obig_mul(&interim, k_inverse, interim_mod);
+    obig_div_mod(&tmp, &s, interim, n);
+    s_comp_result = obig_cmp(s, zero);
+    
+    revealOblivInt(&io->RisZero, r_comp_result, 0);
+    revealOblivInt(&io->SisZero, s_comp_result, 0);
+
+    for (int i = 0; i < r.digits; i++)
+        revealOblivChar(&io->r[i], r.data[i], 0);
+
+    for (int i = 0; i < s.digits; i++)
+        revealOblivChar(&io->s[i], s.data[i], 0);
+
+    obig_free(&k_A);
+    obig_free(&k_B);
+    //... and so on  
+}
+\end{OblivC}
+
+%\dnote{update line numbers to match code with with auto-generated line numbers}
+
+Line 2 declares the `\texttt{obig}' variables for storing curve parameters, signing keys and message to be signed. `\texttt{obig}' variables can store any arbitrary length big numbers and support basic arithmetic operations like addition, subtraction, multiplication and division. We require `\texttt{obig}' variables to store the 192-bit curve parameters for our implementation of `\texttt{secp192k1}'. Line 3 declares `\texttt{obliv}' variables which are used to temporarily store the random number and key shares. Lines 5--7 initialize the `\texttt{obig}' variables. The content of these variables is not revealed to any party, unless \texttt{revealObliv<Type>()} function is invoked explicitly. Lines 9--15 load the random number and key shares from the two parties, such that $k_A$ is loaded from party 1 and $k_B$ is loaded from party 2, and so on.
+
+Before the certificate signing process begins, the hash of `\texttt{tbsCert}' from both the parties are to be negotiated. Both the parties load their hash values $z_A$ and $z_B$ in plain text (lines 17--19). Next, assertion is done in line 22, where we compare that both the hash values $z_A$ and $z_B$ are equal. The signing process continues only if the assertion passes, otherwise the protocol is terminated. Next, the private key shares and random number shares are combined in lines 25 and 26. ECDSA certificate signing is performed in lines 28--38 according to Section~\ref{sec:ecdsa}. After the computation, we reveal to both the parties if the $r$ or $s$ was zero (in lines 40 and 41), indicating the parties to rerun the algorithm with different shares of $k_A$ and $k_B$. Finally, signature pair ($r, s$) is revealed to both the parties (lines 43--47), and this concludes the MPC protocol.
+
+The same code can be easily switched between Yao's protocol and Dual Execution protocol. In order to execute Yao's protocol, `\texttt{signCertificate()}' function is passed as an argument to `\texttt{execYaoProtocol()}' function in a wrapper code. To run Dual Execution, `\texttt{signCertificate()}' function is passed as an argument to `\texttt{execDualexProtocol()}' function in the wrapper code.

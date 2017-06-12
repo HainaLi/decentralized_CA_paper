@@ -1,0 +1,79 @@
+\section{Background}
+\label{sec:background}
+This section provides background on how certificates are issued, secure multi-party computation protocols, and the ECDSA signing algorithm.
+
+\subsection{Certificate Issuance Process}
+\label{sec:certificate_issuance_process}
+
+Digital certificates are issued by trusted certificate authorities for certificate recipients (more formally referred to as \emph{subjects}) who wish to establish a secure connection with the clients visiting their web page. Here, we provide some background on the contents and format of X.509 digital certificates used in TLS, and the process followed to issue a certificate.
+
+\shortsection{X.509 Digital Certificates} The standard format of TLS/SSL public key certificates is X.509, which is made up of three components: (1) the certificate, which contains information identifying the issuer and the subject and the scope of the certificate (version number and validation period), (2) the certificate signature algorithm specifying the algorithm that was used for signing, and (3) the certificate signature~\cite{x509_certificate_standard}. Whereas verifying the parameters of the certificate component (1) is important in our decentralized CAs set up, our primary goal is to compute the certificate signature (3) using a joint signing process where the signing key is never exposed.
+
+%through multi-party computation, which is introduced in Section~\ref{sec:multi_party_computation}.
+
+\shortsection{Subject Requests for a Certificate}
+In the current X.509 setup, the subject must apply for a certificate through submitting a \emph{Certificate Signing Request} (CSR)~\cite{certificate_signing_request}. The first time the subject requests a certificate, it generates a public-private key pair, including the public key in the CSR and using the private key to sign the CSR. Note that this key pair and signature is different from the CA's key pair and certificate signature that must be generated using the CA's private key. The subject's signature provides a consistency check that allows the CA to verify the CSR signature with the subject's provided public key. % to prevent another subject from requesting a bogus certificate. 
+
+\shortsection{Verifying the Subject's Identity}  
+Today, attesting to the applicant's CSR contents has become increasingly automated through ad hoc mechanisms, though manual effects still remain. Through the open-source automatic certificate management environment (ACME) (as used by Let's Encrypt), the applicant can prove its ownership of the domain by responding to a series of server-generated challenges (i.e., proving control over a domain by setting a specific location on its website to an ACME-specified string)~\cite{ietfacme}. ACME allows certificates to be issued at a lower cost, but the lack of manual scrutiny allows phishing websites, for instance, to obtain certificates for popular domain look-alikes, which happened with \domain{paypal.com}~\cite{lets_encrypt_paypal}. It also only attests to having (apparent) control of the domain at the time of the request, but does not provide any way to verify that it is the legitimate owner of that domain or a trustworthy organization.
+
+The attestation process for proprietary CAs is not as publicly known as ACME, and often includes non-automated steps. One of the manual validation steps completed by Comodo is a phone call to a number verified by a government or third party database, or by legal opinion or accountant letter. This extra manual effort both would have prevented the \domain{paypal.com} incident and stopped an attacker with a stolen CSR private key and access to the victim's server from obtaining a certificate. 
+
+Certificates designated as \emph{Extended Validation} (EV) involve more extensive validation. 
+In order to issue EV certificates, a CA must pass an independent audit~\cite{cabaudit} and follow defined criteria in issuing certificates including verifying the subject's identity through a stricter, manual vetting process that includes both the Baseline Requirements and the Extended Validation requirements~\cite{extended_validation_certificate}. 
+Major browsers display the padlock and green address bar for EV certificates. This conveys a higher level of security to customers, and CAs charge subjects a premium to obtain them.
+
+%\dnote{worth having some discussion of how this is done - including both automated protocols (ACME) and manual ones}
+
+\shortsection{CA signs the Certificate}
+After verifying the subject's identify and validity of the request, the issuer composes the (1) certificate. Although we colloquially refer to the issuer's role as simply `signing a certificate', the technical term for the input to the signature algorithm is the \emph{TBSCertificate}, which is actually the (1) certificate. The TBSCertificate is very similar to the CSR. But, whereas the CSR only contains information about the subject, the TBSCertificate contains pertinent information about both the subject and issuer. The output to the signature function is the (3) certificate signature. In the rest of the paper, we frequently use the terms \emph{signature generation} and \emph{certificate generation} interchangeably to mean the process whereby a signed certificate is created from the TBSCertificate contents.
+
+\subsection{Elliptic Curve Digital Signature Algorithm}
+\label{sec:ecdsa}
+ECDSA is a popular certificate signing algorithm that is included with most TLS libraries including OpenSSL and GnuTLS, and is supported by major web browsers including Mozilla Firefox, Google Chrome, Internet Explorer, Safari and Opera. %\dnote{what matters is that it is accepted by major browsers}
+
+ECDSA depends on modular arithmetic operations on elliptic curves defined by the equation \[y^2 \equiv x^3 + ax + b \mod p\] 
+The curve is defined by three parameters: $p$, a large prime defining the curve finite field $\mathbb{F}_p$, and the coefficients, $a$ and $b$.  The size of the parameters defines the size of the elliptic curve.  %\dnote{NIST specifies curves recommended for ECDSA with ?} 
+NIST specifies curves recommended for ECDSA with 192 bits, 256 bits, 384 bits and 512 bits~\cite{nistCurves}. %\dnote{cite if this is part of spec?}
+
+Signing depends on three additional public parameters as defined by Standards for Efficient Cryptography Group (SECG)~\cite{elliptic_curve_domain_parameters}: $G$ is the base point of the curve, $n$ is the order of $G$, and $h$ is the cofactor. All the parameters are of same size as $p$.
+% \dnote{where do these come from for actual ECDSA we use? are they public parameters recommended by NIST?}
+
+%\dnote{need to explain generation of private,public key pair - $d$ is random from what, and how is public key computed from $d$}
+Signing requires a private-public key pair ($sk, pk$). The private key $sk$ is chosen uniformly randomly from the range [$1, p-1$], and the corresponding public key $pk$ is obtained from the curve point multiplication $pk = sk \times G$.
+
+Signing begins with generation of a uniform random number, $k$, in the range [$1, p-1$], which is used to obtain a curve point ($u, v$) $ = k \times G$. 
+One part of signature is $r = u \mod n$. At this stage, if $r$ is 0 (which should happen with negligible probability), then the whole process is repeated with freshly generated random number $k$. The other part of signature is $s = k^{-1}(z + rd) \mod n$, where $d$ is the private key used for signing and $z$ is the hash of the message to be signed.  Again, a check is performed to verify that $s$ is not 0. If it is, the process is repeated with freshly generated random number $k$. Otherwise, the final pair $(r, s)$ is the signature, which is made public.  %\dnote{the () in (z + rd) and (r, s) are not showing up for me in the PDF}
+
+
+\subsection{Secure Multi-Party Computation}
+\label{sec:multi_party_computation}
+
+Secure multi-party computation enables multiple parties to collaboratively compute a function on their private inputs without revealing any information about those inputs or intermediate values.  At the end of the protocol, the output of the computation is revealed (to one or more of the parties). We limit our focus here to two-party computation because it fits our problem setting well, although several methods exist for extending multi-party computation to more than two parties.  Two-party computation was introduced by Yao~\cite{yao1982protocols}, and he presented a generic method for computing any function securely using garbled circuits in a series of talks in the 1980s that is now known as ``Yao's protocol''.  The protocol enables any function that can be represented by a Boolean circuit to be computed securely. 
+
+In a standard Yao's protocol execution, one party, known as the \emph{generator}, generates the garbled circuit that computes over encrypted inputs and passes it to the other party, known as the \emph{evaluator}, who evaluates the circuit by plugging in the encrypted inputs.  Instead of operating on semantic values, the garbled circuit operates on wire labels, random nonces that provide no information, but allow the evaluator to evaluate the circuit. The evaluator obtains the wire labels corresponding to her own inputs using an oblivious transfer protocol~\cite{even1985randomized}, and extended OT protocols enable large inputs to be transferred efficiently~\cite{ishai2003extending, naor2001efficient, nielsen2012new, harnik2008ot}. The output of the computation is revealed to the parties at the end of the protocol, typically by providing hashes of the final output wire labels to the evaluator, who sends the semantic output back to the generator.
+
+Yao's protocol provides security only against \emph{semi-honest} adversaries, which are required to follow the protocol as specified but may attempt to infer private information from the protocol transcript.  It does not provide security against active adversaries since there is no way for the evaluator to know she is evaluating the correct circuit, and there is no way for the generator to verify the output provided by the evaluator is the actual output. A malicious generator could generate a circuit that computes some other, more revealing, function on the other party's input, instead of the agreed-to function. In our scenario, instead of outputting the correct signature (which should not reveal the other party's key share), the circuit could be designed to output the other party's key share masked with a value known to the generator.
+
+Hence, although semi-honest security can provide some protection by avoiding the need to store the key in a way that could be exposed, is not sufficient for implementing a decentralized CA in any adversarial context.  The most common methods for hardening MPC protocols to provide security against active adversaries is to use like cut-and-choose~\cite{lindell2007efficient}.
+In a standard cut-and-choose protocol, the generator generates $k$ garbled circuits and the evaluator chooses a fraction of the circuits and asks the generator to reveal those circuits to test their correctness. The evaluator then uses the remaining circuits for secure computation.  Although there have been many improvements to the basic cut-and-choose protocol~\cite{afshar2015efficiently, afshar2014non, brandao2013secure, frederiksen2013minilego, huang2014amortizing, kreuter2012billion, lindell2016fast, lindell2012secure, lindell2008implementing, lindell2014cut, lindell2015blazing, nielsen2009lego, pinkas2009secure, shen2011two, shen2013fast, woodruff2007revisiting}, it remains expensive for large circuits.
+
+%\dnote{provide at least a brief description of others, at least cut-and-chooose, and some references.}
+%\bnote{shift dualex to design section - sec 3} \bnote{Why use dualex? Whats the real benefit}
+
+\shortsection{Dual execution} The alternative, which we explore in this work, is to relax the strict requirements of fully malicious security to enable more efficient solutions. In particular, we use dual execution~\cite{mohassel2013garbled, huang2012quid}, which provides active security against arbitrary adversaries, but sacrifices up to one bit of leakage to provide a much more efficient solution. In a dual execution protocol, Yao's protocol is executed twice, with the parties switching roles in the consecutive executions. Before revealing the output, though, the outputs of the two executions are tested for equality using a malicious-secure equality test protocol. The output is revealed to both the parties only if the equality check passes.  Otherwise, it is apparent that one of the parties deviated from the protocol and the protocol is terminated.  A malicious adversary can exploit this to leak a single bit that is (at worst) the output of an arbitrary predicate by using selective failure---designing a circuit that behaves correctly on some inputs but incorrectly on others, so the equality test check result reveals which the subset of inputs contains the other party's input.  
+
+We use Yao's protocol in the case of semi-honest adversaries and dual execution in the case of malicious adversaries. In the next section, we discuss our signing algorithm and how we adopt these protocols for our scenario.
+%\dnote{should make this specific to our use, unless that will be later - since both parties can check that the certificate is valid, I don't think there is any freedom to actually leak anything in output. I'm not actually sure we need DualEx now - wouldn't it would to do,
+%gen       eval
+%  
+%  - run MPC using maliciously-secure OT, eval gets result -
+%          - check signature is valid - this is enough to prove generated circuit was valid
+%          - share result
+%         ?             
+%generator can cheat by making circuit that would generate bad signature for some keyshare inputs - but this would leak 1-bit, and be caught whenever it produces bad signature.
+%I'm not sure we get much more than this with dualEx. This assumes the issues with random k don't provide another opportunity for malicious generator. If r=0 or s=0 and need to redo, generator should need to prove it didn't cheat by revealing its share of k, so evaluator can check.  Does k need to be kept secret, or can it be revealed along with r,s at end?
+%} 
+%\bnote{revealing k will reveal the private key d}
+
+%\dnote{should add a section on implementing MPC protocols}
