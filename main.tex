@@ -13,7 +13,12 @@
 
 
 \input{preamble.tex}
-
+\makeatletter
+\def\url@leostyle{%
+  \@ifundefined{selectfont}{\def\UrlFont{\sf}}{\def\UrlFont{\small\sffamily}}}
+\makeatother
+%% Now actually use the newly defined style.
+\urlstyle{leo}
 
 % Copyright
 %\setcopyright{none}
@@ -29,13 +34,9 @@
 \begin{document}
 
 \title{Decentralized Certificate Authorities}
-%\titlenote{Produces the permission block, andcopyright information}
-%\subtitle{Extended Abstract}
-%\subtitlenote{The full version of the author's guide is available as
-%  \texttt{acmart.pdf} document}
 
 
-\author{Bargav Jayaraman, Haina Li, David Evans}
+\author{Bargav Jayaraman, Hannah Li, David Evans}
 \authornote{The first two authors both contributed as co-equal first authors.}
 \affiliation{\institution{University of Virginia}
 \city{\href{https://oblivc.org/dca}{\sf https://oblivc.org/dca}}}
@@ -93,6 +94,13 @@ little as 28.2-32.6 cents without bandwidth cost and approximately
 \input{07_related}
 \input{08_conclusion}
 
+\subsection*{Availability}
+
+Our code is available under an open source license from:
+\begin{center}
+\url{https://github.com/hainali/decentralizedca}.
+\end{center}
+
 \begin{acks}
 The authors thank Jack Doerner for providing the Absentminded Crypto Kit and extensive help with using it, and Samee Zahur for developing and supporting Obliv-C.  The work was partially funded by an award from the National Science Foundation (1111781) and gifts from Amazon, Google, and Microsoft.
 \end{acks}
@@ -101,7 +109,16 @@ The authors thank Jack Doerner for providing the Absentminded Crypto Kit and ext
 
 \input{appendix}
 
+\clearpage
+
 \bibliographystyle{ACM-Reference-Format}
+\makeatletter
+\def\url@bibstyle{%
+  \@ifundefined{selectfont}{\def\UrlFont{\sf}}{\def\UrlFont{\scriptsize\sffamily}}}
+\makeatother
+%% Now actually use the newly defined style.
+\urlstyle{bib}
+
 \bibliography{decentralized_ca}
 
 \end{document}
